@@ -1580,7 +1580,7 @@ def image_upload_post(transaction):
     :param transaction:
     :return:
     """
-    transaction['skip'] = True
+    pass
 
 
 @hooks.before("Upload > File Upload > Upload a File")
@@ -1590,7 +1590,7 @@ def file_upload_post(transaction):
     :param transaction:
     :return:
     """
-    transaction['skip'] = True
+    pass
 
 
 # ------------------------- Event Types -------------------------

@@ -6986,7 +6986,7 @@ Delete a single image size.
 
 **ADMIN**
 
-To create or modify data of this data layer, you will need admin access. You can get the data without admin access as well. 
+To create or modify data of this data layer, you will need admin access. You can get the data without admin access as well.
 
 | Parameter | Description | Type | Required |
 |:----------|-------------|------|----------|
@@ -7873,7 +7873,7 @@ A temporary cropped image is first uploaded using this endpoint. After saving th
     + Headers
 
             Content-Type: application/json
-            Authorization: JWT <access_token>
+            Authorization: JWT <Auth Key>
 
     + Body
 
@@ -7899,9 +7899,16 @@ This endpoint supports uploading of any kind of file or multiple files. If a sin
 
 + Request(multipart/form-data; boundary=---BOUNDARY)
 
-        -----BOUNDARY
-        Content-Disposition: form-data; name="file"; filename="test.csv"
-        Content-Type: text/csv
+    + Headers
+
+            Content-Type: application/json
+            Authorization: JWT <Auth Key>
+
+    + Body
+
+            {
+                "data": "data:image/gif;base64,R0lGODlhEAAQAMQAAORHHOVSKudfOulrSOp3WOyDZu6QdvCchPGolfO0o/XBs/fNwfjZ0frl3/zy7////wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACH5BAkAABAALAAAAAAQABAAAAVVICSOZGlCQAosJ6mu7fiyZeKqNKToQGDsM8hBADgUXoGAiqhSvp5QAnQKGIgUhwFUYLCVDFCrKUE1lBavAViFIDlTImbKC5Gm2hB0SlBCBMQiB0UjIQA7"
+            }
 
 + Response 200 (application/json)
 
