@@ -10,6 +10,7 @@ from app.api.helpers.permissions import jwt_required
 from app.api.helpers.errors import ForbiddenError
 from sqlalchemy.orm.exc import NoResultFound
 from app.models import db
+from app.api.bootstrap import api
 from app.models.event import Event
 from app.models.discount_code import DiscountCode
 from app.api.helpers.exceptions import UnprocessableEntity
@@ -164,6 +165,7 @@ class DiscountCodeList(ResourceList):
         :param view_kwargs:
         :return:
         """
+        print current_user
         if view_kwargs.get('event_id') and data['used_for'] == 'ticket' and current_user.is_organizer:
             print "hello"
             self.schema = DiscountCodeSchemaTicket
@@ -188,25 +190,25 @@ class DiscountCodeList(ResourceList):
                 pass
             else:
                 raise UnprocessableEntity({'parameter': 'event_identifier'},
-                                      "Event Copyright already exists for the provided Event ID")
+                                      "Discount Code already exists for the provided Event ID")
 
-        elif not view_kwargs.get('event_identifier') or not view_kwargs.get('event_id') and data['used_for'] == 'ticket' and current_user.is_organizer:
+        elif ((not view_kwargs.get('event_identifier')) or (not view_kwargs.get('event_id'))) and data['used_for'] == 'ticket':
             raise UnprocessableEntity({'source': ''},"Organizers use v1/events/<int:event_id/discout-codes endpoint")
 
-        elif not view_kwargs.get('event_identifier') or not view_kwargs.get('event_id')\
-        and data['used_for'] == 'event' and current_user.is_admin:
-            print "hey"
+        elif ((not view_kwargs.get('event_identifier')) or (not view_kwargs.get('event_id')))\
+        and data['used_for'] == 'event' and current_user.is_admin == True:
+            print "hey", current_user.is_admin
             self.schema = DiscountCodeSchemaEvent
 
-        elif view_kwargs.get('event_identifier') or view_kwargs.get('event_id')\
-        and data['used_for'] == 'event' and current_user.is_admin:
-            print "hey"
+        elif (view_kwargs.get('event_identifier') or view_kwargs.get('event_id'))\
+        and data['used_for'] == 'event' and current_user.is_admin == True:
             raise UnprocessableEntity({'source': ''},"Admins use v1/discout-codes endpoint")
 
         else:
             raise UnprocessableEntity({'source': ''},"Neither Admin nor Organizer")
 
-    decorators = (jwt_required, )
+    decorators = (api.has_permission('is_organizer', fetch='event_id', fetch_as="event_id", methods="POST,GET",
+                                     check=lambda a: a.get('event_id') or a.get('event_identifier')),)
     schema = DiscountCodeSchemaEvent
     data_layer = {'session': db.session,
                   'model': DiscountCode,
