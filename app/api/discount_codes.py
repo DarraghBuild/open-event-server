@@ -14,6 +14,7 @@ from app.api.bootstrap import api
 from app.models.event import Event
 from app.models.discount_code import DiscountCode
 from app.api.helpers.exceptions import UnprocessableEntity
+from app.api.helpers.errors import NotFoundError
 from app.api.helpers.db import safe_query
 
 
@@ -141,21 +142,21 @@ class DiscountCodeList(ResourceList):
         :return:
         """
         query_ = self.session.query(DiscountCode)
-        if view_kwargs.get('event_id') and current_user.is_co_organizer(kwargs['event_id']):
+        if view_kwargs.get('event_id') and current_user.is_co_organizer(view_kwargs.get('event_id')):
             event = safe_query(self, Event, 'id', view_kwargs['event_id'], 'event_id')
             query_ = query_.filter_by(event_id=event.id)
             self.schema = DiscountCodeSchemaTicket
 
-        elif view_kwargs.get('event_identifier') and current_user.is_co_organizer(kwargs['event_id']):
+        elif view_kwargs.get('event_identifier') and current_user.is_co_organizer(view_kwargs.get('event_id')):
             event = safe_query(self, Event, 'identifier', view_kwargs['event_identifier'], 'event_identifier')
             query_ = query_.join(Event).filter(Event.id == event.id)
             self.schema = DiscountCodeSchemaTicket
 
-        elif current_user.is_admin:
+        elif (not view_kwargs.get('event_identifier') or not view_kwargs.get('event_id')) and current_user.is_admin:
             self.schema = DiscountCodeSchemaEvent
         else:
             raise UnprocessableEntity({'source': ''},"Neither Admin nor Organizer")
-        
+
         return query_
 
     def before_create_object(self, data, view_kwargs):
@@ -165,50 +166,47 @@ class DiscountCodeList(ResourceList):
         :param view_kwargs:
         :return:
         """
-        print current_user
-        if view_kwargs.get('event_id') and data['used_for'] == 'ticket' and current_user.is_organizer:
+        if view_kwargs.get('event_id') and data['used_for'] == 'ticket' and current_user.is_organizer(view_kwargs.get('event_id')):
             print "hello"
             self.schema = DiscountCodeSchemaTicket
             event = safe_query(self, Event, 'id', view_kwargs['event_id'], 'event_id')
             data['event_id'] = event.id
             try:
-                self.session.query(DiscountCode).filter_by(event_id=data['event_id']).one()
+                self.session.query(DiscountCode).filter_by(event_id=data['event_id']).filter_by(used_for='event').one()
             except NoResultFound:
                 pass
             else:
                 raise UnprocessableEntity({'parameter': 'event_id'},
                                       "Discount Code already exists for the provided Event ID")
 
-        elif view_kwargs.get('event_identifier') and data['used_for'] == 'ticket' and current_user.is_organizer:
+        elif view_kwargs.get('event_identifier') and data['used_for'] == 'ticket' and current_user.is_organizer(view_kwargs.get('event_id')):
             print "hello"
             self.schema = DiscountCodeSchemaTicket
             event = safe_query(self, Event, 'identifier', view_kwargs['event_identifier'], 'event_identifier')
             data['event_id'] = event.id
             try:
-                self.session.query(DiscountCode).filter_by(event_id=data['event_id']).one()
+                self.session.query(DiscountCode).filter_by(event_id=data['event_id']).filter_by(used_for='event').one()
             except NoResultFound:
                 pass
             else:
                 raise UnprocessableEntity({'parameter': 'event_identifier'},
                                       "Discount Code already exists for the provided Event ID")
 
-        elif ((not view_kwargs.get('event_identifier')) or (not view_kwargs.get('event_id'))) and data['used_for'] == 'ticket':
-            raise UnprocessableEntity({'source': ''},"Organizers use v1/events/<int:event_id/discout-codes endpoint")
+        elif not view_kwargs.get('event_identifier') and not view_kwargs.get('event_id') and data['used_for'] == 'ticket':
+            raise UnprocessableEntity({'source': ''},"Use /v1/events/<int:event_id/discout-codes endpoint")
 
-        elif ((not view_kwargs.get('event_identifier')) or (not view_kwargs.get('event_id')))\
-        and data['used_for'] == 'event' and current_user.is_admin == True:
+        elif (not view_kwargs.get('event_identifier') or not view_kwargs.get('event_id'))\
+        and data['used_for'] == 'event' and current_user.is_admin:
             print "hey", current_user.is_admin
             self.schema = DiscountCodeSchemaEvent
 
-        elif (view_kwargs.get('event_identifier') or view_kwargs.get('event_id'))\
-        and data['used_for'] == 'event' and current_user.is_admin == True:
-            raise UnprocessableEntity({'source': ''},"Admins use v1/discout-codes endpoint")
+        elif (view_kwargs.get('event_identifier') or view_kwargs.get('event_id')) and data['used_for'] == 'event':
+            raise UnprocessableEntity({'source': ''},"Use /v1/discout-codes endpoint")
 
         else:
-            raise UnprocessableEntity({'source': ''},"Neither Admin nor Organizer")
+            raise UnprocessableEntity({'source': ''},"Please check used_for and endpoint and verify your permission")
 
-    decorators = (api.has_permission('is_organizer', fetch='event_id', fetch_as="event_id", methods="POST,GET",
-                                     check=lambda a: a.get('event_id') or a.get('event_identifier')),)
+    decorators = (jwt_required,)
     schema = DiscountCodeSchemaEvent
     data_layer = {'session': db.session,
                   'model': DiscountCode,
@@ -221,10 +219,58 @@ class DiscountCodeDetail(ResourceDetail):
     """
     Discount Code detail by id
     """
+
+    def before_get_object(self, view_kwargs):
+        """
+        query method for Discount Code List
+        :param view_kwargs:
+        :return:
+        """
+        print view_kwargs['id']
+        discount = self.session.query(DiscountCode).filter_by(id=view_kwargs.get('id'))
+        if not discount:
+            raise NotFoundError()
+
+        if discount.used_for == 'ticket' and current_user.is_co_organizer(discount.event_id):
+            self.schema = DiscountCodeSchemaTicket
+
+        elif discount.used_for == 'event' and current_user.is_admin:
+            self.schema = DiscountCodeSchemaEvent
+        else:
+            raise UnprocessableEntity({'source': ''},"Neither Admin nor Organizer")
+
+    def before_update_object(self, obj, data, view_kwargs):
+        """
+        Method to create object before posting
+        :param data:
+        :param view_kwargs:
+        :return:
+        """
+        discount = self.session.query(DiscountCode).filter_by(id=view_kwargs.get('id'))
+        if not discount:
+            raise NotFoundError()
+
+        if 'used_for' in data:
+            used_for = data['used_for']
+
+        if discount.used_for == 'ticket' and current_user.is_co_organizer(discount.event_id) and used_for != 'event':
+            print "hello"
+            self.schema = DiscountCodeSchemaTicket
+
+        elif data['used_for'] == 'event' and current_user.is_admin and used_for != 'ticket':
+            print "hey", current_user.is_admin
+            self.schema = DiscountCodeSchemaEvent
+
+        else:
+            raise UnprocessableEntity({'source': ''},"Please check used_for and endpoint and verify your permission")
+
     decorators = (jwt_required,)
     schema = DiscountCodeSchemaEvent
     data_layer = {'session': db.session,
-                      'model': DiscountCode}
+                  'model': DiscountCode,
+                  'methods': {
+                    'before_get_object': before_get_object,
+                    'before_update_object': before_update_object}}
 
 
 class DiscountCodeRelationship(ResourceRelationship):
