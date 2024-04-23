@@ -3,9 +3,7 @@ title: Heroku
 ---
 
 One-click Heroku deployment is available:
-
-[![Deploy](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy)
-
+Build.io
 ### Steps for Manual Deployment
 
 * We need to install heroku on our machine. Type the following in your linux terminal:
